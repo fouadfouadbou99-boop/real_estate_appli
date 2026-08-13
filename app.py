@@ -3,10 +3,10 @@ import pandas as pd
 import plotly.express as px
 
 from config import DEFAULTS
-from modules.debt import debt_schedule
-from modules.underwriting import build_cashflows
-from modules.portfolio import portfolio_summary
-from modules.risk import (
+from debt import debt_schedule
+from underwriting import build_cashflows
+from portfolio import portfolio_summary
+from risk import (
     risk_score,
     risk_category
 )
