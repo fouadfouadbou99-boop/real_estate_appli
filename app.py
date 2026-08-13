@@ -1,13 +1,48 @@
-import streamlit as st
-import pandas as pd
-import numpy as np
-import plotly.express as px
-from numpy_financial import irr, npv
-from io import BytesIO
+# =====================================================
+# REAL ESTATE INVESTMENT PLATFORM
+# app.py
+# =====================================================
 
-# =============================================================================
-# CONFIGURATION
-# =============================================================================
+import streamlit as st
+import plotly.express as px
+import pandas as pd
+
+from config import DEFAULTS
+
+from modules.debt import (
+    debt_schedule
+)
+
+from modules.underwriting import (
+    build_cashflows
+)
+
+from modules.valuation import (
+    add_exit_to_cashflows,
+    valuation_summary
+)
+
+from modules.metrics import (
+    kpi_summary
+)
+
+from modules.risk import (
+    risk_score,
+    risk_category
+)
+
+from modules.portfolio import (
+    portfolio_summary
+)
+
+from modules.montecarlo import (
+    run_monte_carlo,
+    monte_carlo_summary
+)
+
+# =====================================================
+# CONFIG STREAMLIT
+# =====================================================
 
 st.set_page_config(
     page_title="Real Estate Investment Platform",
@@ -16,469 +51,513 @@ st.set_page_config(
 )
 
 st.title("🏢 Real Estate Investment Platform")
-st.markdown("Modélisation et analyse d'investissements immobiliers")
 
-# =============================================================================
+# =====================================================
 # SIDEBAR
-# =============================================================================
+# =====================================================
 
-st.sidebar.header("Hypothèses")
+st.sidebar.title("⚙️ Hypothèses")
+
+scenario = st.sidebar.selectbox(
+    "Scénario",
+    [
+        "Stress",
+        "Base",
+        "Optimiste"
+    ]
+)
 
 purchase_price = st.sidebar.number_input(
-    "Prix d'acquisition",
-    min_value=0.0,
-    value=1_000_000.0,
-    step=10000.0
+    "Prix acquisition",
+    value=float(DEFAULTS["purchase_price"])
 )
 
 acquisition_fee_rate = (
-    st.sidebar.slider(
-        "Frais d'acquisition (%)",
-        0.0,
-        20.0,
-        8.0
+    st.sidebar.number_input(
+        "Frais acquisition (%)",
+        value=float(DEFAULTS["acquisition_fee_rate"] * 100)
     ) / 100
 )
 
 capex = st.sidebar.number_input(
     "Travaux",
-    min_value=0.0,
-    value=100_000.0,
-    step=5000.0
+    value=float(DEFAULTS["capex"])
 )
 
 gross_rent_y1 = st.sidebar.number_input(
-    "Loyer brut Année 1",
-    min_value=0.0,
-    value=120_000.0,
-    step=1000.0
+    "Loyer brut année 1",
+    value=float(DEFAULTS["gross_rent_y1"])
 )
 
 rent_growth = (
-    st.sidebar.slider(
-        "Croissance des loyers (%)",
-        0.0,
-        10.0,
-        2.0
+    st.sidebar.number_input(
+        "Croissance loyers (%)",
+        value=float(DEFAULTS["rent_growth"] * 100)
     ) / 100
 )
 
 vacancy_rate = (
-    st.sidebar.slider(
+    st.sidebar.number_input(
         "Vacance (%)",
-        0.0,
-        30.0,
-        5.0
+        value=float(DEFAULTS["vacancy_rate"] * 100)
     ) / 100
 )
 
 expense_rate = (
-    st.sidebar.slider(
-        "Charges (%)",
-        0.0,
-        50.0,
-        20.0
+    st.sidebar.number_input(
+        "Charges variables (%)",
+        value=float(DEFAULTS["expense_rate"] * 100)
     ) / 100
 )
+
+# =====================================================
+# PARAMETRES SCENARIOS
+# =====================================================
+
+if scenario == "Stress":
+
+    rent_growth = 0.01
+    vacancy_rate = 0.10
+    exit_cap_rate = 0.08
+
+elif scenario == "Optimiste":
+
+    rent_growth = 0.04
+    vacancy_rate = 0.03
+    exit_cap_rate = 0.06
+
+else:
+
+    exit_cap_rate = DEFAULTS["exit_cap_rate"]
+
+# =====================================================
+# FINANCEMENT
+# =====================================================
+
+st.sidebar.subheader("Dette")
 
 ltv = (
-    st.sidebar.slider(
-        "LTV (%)",
-        0.0,
-        90.0,
-        70.0
+    st.sidebar.number_input(
+        "Dette (%)",
+        value=float(DEFAULTS["ltv"] * 100)
     ) / 100
 )
 
-interest_rate = (
-    st.sidebar.slider(
-        "Taux de dette (%)",
-        0.0,
-        15.0,
-        5.0
+debt_rate = (
+    st.sidebar.number_input(
+        "Taux dette (%)",
+        value=float(DEFAULTS["debt_rate"] * 100)
     ) / 100
 )
 
-loan_term = st.sidebar.number_input(
-    "Durée de la dette (années)",
-    min_value=1,
-    max_value=40,
-    value=20
+debt_term = st.sidebar.number_input(
+    "Durée dette",
+    value=int(DEFAULTS["debt_term"])
 )
+
+# =====================================================
+# SORTIE
+# =====================================================
+
+st.sidebar.subheader("Cession")
 
 holding_period = st.sidebar.number_input(
-    "Durée de détention (années)",
-    min_value=1,
-    max_value=40,
-    value=20
-)
-
-exit_cap_rate = (
-    st.sidebar.slider(
-        "Exit Cap Rate (%)",
-        1.0,
-        15.0,
-        7.0
-    ) / 100
+    "Horizon investissement",
+    value=int(DEFAULTS["holding_period"])
 )
 
 sale_cost_rate = (
-    st.sidebar.slider(
-        "Frais de cession (%)",
-        0.0,
-        10.0,
-        3.0
+    st.sidebar.number_input(
+        "Frais cession (%)",
+        value=float(DEFAULTS["sale_cost_rate"] * 100)
     ) / 100
 )
 
 discount_rate = (
-    st.sidebar.slider(
-        "Taux d'actualisation (%)",
-        1.0,
-        20.0,
-        8.0
+    st.sidebar.number_input(
+        "Taux actualisation (%)",
+        value=float(DEFAULTS["discount_rate"] * 100)
     ) / 100
 )
 
-# =============================================================================
-# INVESTISSEMENT INITIAL
-# =============================================================================
+# =====================================================
+# CHARGES DETAILLEES
+# =====================================================
 
-acquisition_fees = purchase_price * acquisition_fee_rate
+st.sidebar.subheader("Charges détaillées")
+
+taxe_fonciere = st.sidebar.number_input(
+    "Taxe foncière",
+    value=float(DEFAULTS["taxe_fonciere"])
+)
+
+assurance = st.sidebar.number_input(
+    "Assurance",
+    value=float(DEFAULTS["assurance"])
+)
+
+maintenance = st.sidebar.number_input(
+    "Maintenance",
+    value=float(DEFAULTS["maintenance"])
+)
+
+gestion_locative = st.sidebar.number_input(
+    "Gestion locative",
+    value=float(DEFAULTS["gestion_locative"])
+)
+
+inflation = (
+    st.sidebar.number_input(
+        "Inflation (%)",
+        value=float(DEFAULTS["inflation_rate"] * 100)
+    ) / 100
+)
+
+# =====================================================
+# INVESTISSEMENT
+# =====================================================
+
+acquisition_fees = (
+    purchase_price *
+    acquisition_fee_rate
+)
 
 total_investment = (
-    purchase_price
-    + acquisition_fees
-    + capex
+    purchase_price +
+    acquisition_fees +
+    capex
 )
 
-debt_amount = total_investment * ltv
-equity_amount = total_investment - debt_amount
+loan_amount = (
+    total_investment * ltv
+)
 
-# =============================================================================
-# ANNUITE
-# =============================================================================
+equity_investment = (
+    total_investment - loan_amount
+)
 
-if interest_rate == 0:
-    annuity = debt_amount / loan_term
-else:
-    annuity = debt_amount * (
-        interest_rate /
-        (1 - (1 + interest_rate) ** (-loan_term))
-    )
+# =====================================================
+# DETTE
+# =====================================================
 
-# =============================================================================
-# TABLEAU D'AMORTISSEMENT
-# =============================================================================
+debt_df = debt_schedule(
+    loan_amount,
+    debt_rate,
+    int(debt_term)
+)
 
-debt_rows = []
+annual_debt_service = (
+    debt_df.iloc[0]["Annuity"]
+)
 
-opening_balance = debt_amount
-
-for year in range(1, loan_term + 1):
-
-    interest = opening_balance * interest_rate
-
-    principal = annuity - interest
-
-    closing_balance = max(
-        0,
-        opening_balance - principal
-    )
-
-    debt_rows.append({
-        "Année": year,
-        "Capital initial": opening_balance,
-        "Intérêts": interest,
-        "Principal": principal,
-        "Annuité": annuity,
-        "Capital final": closing_balance
-    })
-
-    opening_balance = closing_balance
-
-debt_df = pd.DataFrame(debt_rows)
-
-# =============================================================================
+# =====================================================
 # CASH FLOWS
-# =============================================================================
+# =====================================================
 
-cf_rows = []
+cashflows_df = build_cashflows(
 
-for year in range(1, holding_period + 1):
+    rent_y1=gross_rent_y1,
 
-    gross_rent = (
-        gross_rent_y1 *
-        ((1 + rent_growth) ** (year - 1))
-    )
+    growth=rent_growth,
 
-    effective_rent = (
-        gross_rent *
-        (1 - vacancy_rate)
-    )
+    vacancy=vacancy_rate,
 
-    noi = (
-        effective_rent *
-        (1 - expense_rate)
-    )
+    expense_rate=expense_rate,
 
-    debt_service = annuity if year <= loan_term else 0
+    debt_service=annual_debt_service,
 
-    equity_cf = noi - debt_service
+    holding_period=int(holding_period),
 
-    cf_rows.append({
-        "Année": year,
-        "Loyer brut": gross_rent,
-        "Loyer net": effective_rent,
-        "NOI": noi,
-        "Service dette": debt_service,
-        "Cash Flow Equity": equity_cf
-    })
+    taxe_fonciere=taxe_fonciere,
 
-cashflow_df = pd.DataFrame(cf_rows)
+    assurance=assurance,
 
-# =============================================================================
-# DETTE RESIDUELLE A LA SORTIE
-# =============================================================================
+    maintenance=maintenance,
 
-if holding_period <= loan_term:
-    remaining_debt = debt_df.loc[
-        debt_df["Année"] == holding_period,
-        "Capital final"
-    ].iloc[0]
-else:
-    remaining_debt = 0
+    gestion_locative=gestion_locative,
 
-# =============================================================================
-# VALEUR DE SORTIE
-# =============================================================================
-
-terminal_noi = cashflow_df.iloc[-1]["NOI"]
-
-gross_exit_value = terminal_noi / exit_cap_rate
-
-sale_costs = gross_exit_value * sale_cost_rate
-
-net_exit_value = gross_exit_value - sale_costs
-
-net_sale_proceeds = (
-    net_exit_value
-    - remaining_debt
+    inflation=inflation
 )
 
-cashflow_df.loc[
-    cashflow_df.index[-1],
-    "Cash Flow Equity"
-] += net_sale_proceeds
+cashflows_df = add_exit_to_cashflows(
 
-# =============================================================================
+    cashflows_df,
+
+    debt_df,
+
+    exit_cap_rate,
+
+    sale_cost_rate
+)
+
+# =====================================================
 # KPI
-# =============================================================================
+# =====================================================
 
-equity_cashflows = [-equity_amount]
-equity_cashflows.extend(
-    cashflow_df["Cash Flow Equity"].tolist()
+kpis = kpi_summary(
+
+    equity_investment=equity_investment,
+
+    loan_amount=loan_amount,
+
+    total_investment=total_investment,
+
+    discount_rate=discount_rate,
+
+    cashflows_df=cashflows_df
 )
 
-try:
-    irr_result = irr(equity_cashflows)
-except:
-    irr_result = np.nan
+# =====================================================
+# RISQUE
+# =====================================================
 
-try:
-    npv_result = (
-        npv(
-            discount_rate,
-            equity_cashflows[1:]
-        )
-        - equity_cashflows[0]
-    )
-except:
-    npv_result = np.nan
-
-equity_multiple = (
-    sum(equity_cashflows[1:])
-    / equity_amount
-    if equity_amount > 0
-    else 0
+risk = risk_score(
+    vacancy_rate,
+    ltv,
+    debt_rate
 )
 
-entry_noi = cashflow_df.iloc[0]["NOI"]
-
-entry_cap_rate = (
-    entry_noi / total_investment
-    if total_investment > 0
-    else 0
-)
-
-dscr = (
-    entry_noi / annuity
-    if annuity > 0
-    else 0
-)
-
-# =============================================================================
+# =====================================================
 # DASHBOARD KPI
-# =============================================================================
+# =====================================================
 
-st.subheader("Indicateurs Clés")
+st.subheader("📊 KPI")
 
-c1, c2, c3, c4 = st.columns(4)
+col1, col2, col3, col4 = st.columns(4)
 
-c1.metric(
-    "TRI",
-    f"{irr_result:.2%}" if not np.isnan(irr_result) else "N/A"
+col1.metric(
+    "IRR",
+    f"{kpis['IRR']} %"
 )
 
-c2.metric(
-    "VAN",
-    f"{npv_result:,.0f}"
+col2.metric(
+    "NPV",
+    f"{kpis['NPV']:,.0f}"
 )
 
-c3.metric(
+col3.metric(
     "DSCR",
-    f"{dscr:.2f}"
+    f"{kpis['DSCR']}"
 )
 
-c4.metric(
+col4.metric(
     "Equity Multiple",
-    f"{equity_multiple:.2f}x"
+    f"{kpis['Equity Multiple']}x"
 )
 
-# =============================================================================
-# STRUCTURE DE FINANCEMENT
-# =============================================================================
+col5, col6, col7, col8 = st.columns(4)
 
-st.subheader("Structure de financement")
-
-a, b, c = st.columns(3)
-
-a.metric(
-    "Investissement Total",
-    f"{total_investment:,.0f}"
+col5.metric(
+    "Cap Rate",
+    f"{kpis['Cap Rate']} %"
 )
 
-b.metric(
-    "Dette",
-    f"{debt_amount:,.0f}"
+col6.metric(
+    "Loan Yield",
+    f"{kpis['Loan Yield']} %"
 )
 
-c.metric(
-    "Fonds Propres",
-    f"{equity_amount:,.0f}"
+col7.metric(
+    "Cash on Cash",
+    f"{kpis['Cash on Cash']} %"
 )
 
-# =============================================================================
-# GRAPHIQUE
-# =============================================================================
-
-st.subheader("Cash Flows Equity")
-
-fig = px.line(
-    cashflow_df,
-    x="Année",
-    y="Cash Flow Equity",
-    markers=True
+col8.metric(
+    "Risk",
+    risk_category(risk)
 )
 
-st.plotly_chart(
-    fig,
-    use_container_width=True
+# =====================================================
+# ONGLETS
+# =====================================================
+
+tab1, tab2, tab3, tab4, tab5 = st.tabs(
+    [
+        "Cash Flows",
+        "Dette",
+        "Valorisation",
+        "Monte Carlo",
+        "Portefeuille"
+    ]
 )
 
-# =============================================================================
-# ANALYSE DE SENSIBILITÉ
-# =============================================================================
-
-st.subheader("Sensibilité Exit Cap Rate")
-
-sensitivity = []
-
-for cap in np.arange(0.05, 0.091, 0.005):
-
-    value = terminal_noi / cap
-
-    sensitivity.append({
-        "Exit Cap Rate (%)": round(cap * 100, 2),
-        "Valeur de sortie": round(value, 0)
-    })
-
-sensitivity_df = pd.DataFrame(sensitivity)
-
-st.dataframe(
-    sensitivity_df,
-    use_container_width=True
-)
-
-# =============================================================================
-# TABLEAUX DETAILLES
-# =============================================================================
-
-tab1, tab2 = st.tabs(
-    ["Cash Flows", "Dette"]
-)
+# =====================================================
+# CASH FLOWS
+# =====================================================
 
 with tab1:
+
     st.dataframe(
-        cashflow_df,
+        cashflows_df,
         use_container_width=True
     )
 
+    fig_cf = px.bar(
+        cashflows_df,
+        x="Year",
+        y="CF Equity",
+        title="Cash Flow Equity"
+    )
+
+    st.plotly_chart(
+        fig_cf,
+        use_container_width=True
+    )
+
+# =====================================================
+# DETTE
+# =====================================================
+
 with tab2:
+
     st.dataframe(
         debt_df,
         use_container_width=True
     )
 
-# =============================================================================
-# EXPORT EXCEL
-# =============================================================================
-
-buffer = BytesIO()
-
-with pd.ExcelWriter(
-    buffer,
-    engine="openpyxl"
-) as writer:
-
-    cashflow_df.to_excel(
-        writer,
-        sheet_name="CashFlows",
-        index=False
+    fig_debt = px.line(
+        debt_df,
+        x="Year",
+        y="Closing Balance",
+        title="Capital restant dû"
     )
 
-    debt_df.to_excel(
-        writer,
-        sheet_name="Dette",
-        index=False
+    st.plotly_chart(
+        fig_debt,
+        use_container_width=True
     )
 
-    pd.DataFrame({
-        "Indicateur": [
-            "TRI",
-            "VAN",
-            "DSCR",
-            "Equity Multiple",
-            "Cap Rate Entrée",
-            "Valeur de sortie nette"
-        ],
-        "Valeur": [
-            irr_result,
-            npv_result,
-            dscr,
-            equity_multiple,
-            entry_cap_rate,
-            net_exit_value
-        ]
-    }).to_excel(
-        writer,
-        sheet_name="KPI",
-        index=False
+# =====================================================
+# VALORISATION
+# =====================================================
+
+with tab3:
+
+    terminal_noi = (
+        cashflows_df.iloc[-1]["NOI"]
     )
 
-st.download_button(
-    "📥 Télécharger Excel",
-    data=buffer.getvalue(),
-    file_name="real_estate_model.xlsx",
-    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    remaining_debt = (
+        debt_df.iloc[-1]["Closing Balance"]
+    )
+
+    val = valuation_summary(
+
+        terminal_noi,
+
+        exit_cap_rate,
+
+        sale_cost_rate,
+
+        remaining_debt
+    )
+
+    st.json(val)
+
+# =====================================================
+# MONTE CARLO
+# =====================================================
+
+with tab4:
+
+    st.subheader(
+        "Simulation Monte Carlo"
+    )
+
+    simulations = st.slider(
+        "Nombre simulations",
+        100,
+        10000,
+        3000
+    )
+
+    mc_df = run_monte_carlo(
+
+        simulations=simulations,
+
+        equity_investment=equity_investment,
+
+        debt_df=debt_df,
+
+        base_rent=gross_rent_y1,
+
+        growth_mean=rent_growth,
+
+        growth_std=0.01,
+
+        vacancy_mean=vacancy_rate,
+
+        vacancy_std=0.02,
+
+        expense_rate=expense_rate,
+
+        debt_service=annual_debt_service,
+
+        holding_period=int(holding_period),
+
+        taxe_fonciere=taxe_fonciere,
+
+        assurance=assurance,
+
+        maintenance=maintenance,
+
+        gestion_locative=gestion_locative,
+
+        inflation=inflation,
+
+        exit_cap_rate=exit_cap_rate,
+
+        sale_cost_rate=sale_cost_rate
+    )
+
+    summary = monte_carlo_summary(
+        mc_df
+    )
+
+    st.json(summary)
+
+    fig_mc = px.histogram(
+        mc_df,
+        x="IRR",
+        nbins=40,
+        title="Distribution des TRI"
+    )
+
+    st.plotly_chart(
+        fig_mc,
+        use_container_width=True
+    )
+
+# =====================================================
+# PORTEFEUILLE
+# =====================================================
+
+with tab5:
+
+    portfolio_df = portfolio_summary()
+
+    st.dataframe(
+        portfolio_df,
+        use_container_width=True
+    )
+
+    fig_portfolio = px.pie(
+        portfolio_df,
+        names="Asset",
+        values="Value",
+        title="Répartition du portefeuille"
+    )
+
+    st.plotly_chart(
+        fig_portfolio,
+        use_container_width=True
+    )
+
+# =====================================================
+# FOOTER
+# =====================================================
+
+st.markdown("---")
+st.caption(
+    "Real Estate Investment Platform | Version Institutionnelle"
 )
