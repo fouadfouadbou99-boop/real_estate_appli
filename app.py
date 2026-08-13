@@ -155,4 +155,4 @@ for year in range(1, loan_term + 1):
     debt_rows.append({
         "Année": year,
         "Capital Initial": opening_balance,
-        "Intérê
+        "Intérêt"
