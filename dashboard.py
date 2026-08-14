@@ -1,81 +1,75 @@
-import matplotlib.pyplot as plt
+import plotly.express as px
+import streamlit as st
 
 
-def create_dashboard(
-    df,
-    output_folder
-):
+def draw_dashboard(df):
 
-    years = df["Année"]
+    st.subheader(
+        "Dashboard Investissement"
+    )
 
-    plt.figure(figsize=(10,5))
-    plt.plot(
-        years,
-        df["Revenus Bruts"]
+    fig1 = px.line(
+        df,
+        x="Année",
+        y="NOI",
+        title="NOI"
     )
-    plt.title(
-        "Evolution des loyers"
-    )
-    plt.grid(True)
-    plt.savefig(
-        f"{output_folder}/loyers.png"
-    )
-    plt.close()
 
-    plt.figure(figsize=(10,5))
-    plt.plot(
-        years,
-        df["NOI"]
+    st.plotly_chart(
+        fig1,
+        use_container_width=True
     )
-    plt.title(
-        "Evolution du NOI"
-    )
-    plt.grid(True)
-    plt.savefig(
-        f"{output_folder}/noi.png"
-    )
-    plt.close()
 
-    plt.figure(figsize=(10,5))
-    plt.bar(
-        years,
-        df["Cash Flow Equity"]
+    fig2 = px.line(
+        df,
+        x="Année",
+        y="DSCR",
+        title="DSCR"
     )
-    plt.title(
-        "Cash Flow Equity"
-    )
-    plt.savefig(
-        f"{output_folder}/equity_cf.png"
-    )
-    plt.close()
 
-    plt.figure(figsize=(10,5))
-    plt.plot(
-        years,
-        df["DSCR"]
-    )
-    plt.axhline(
+    fig2.add_hline(
         y=1.2,
-        color='red',
-        linestyle='--'
+        line_dash="dash",
+        line_color="red"
     )
-    plt.title(
-        "DSCR"
-    )
-    plt.savefig(
-        f"{output_folder}/dscr.png"
-    )
-    plt.close()
 
-    plt.figure(figsize=(10,5))
-    plt.plot(
-        years,
-        df["LTV"]
+    st.plotly_chart(
+        fig2,
+        use_container_width=True
     )
-    plt.title(
-        "LTV"
+
+    fig3 = px.line(
+        df,
+        x="Année",
+        y="LTV",
+        title="LTV"
     )
-    plt.savefig(
-        f"{output_folder}/ltv.png"
+
+    st.plotly_chart(
+        fig3,
+        use_container_width=True
     )
-    plt.close()
+
+    fig4 = px.bar(
+        df,
+        x="Année",
+        y="Cash Flow Equity",
+        title="Cash Flow Equity"
+    )
+
+    st.plotly_chart(
+        fig4,
+        use_container_width=True
+    )
+
+    fig5 = px.area(
+        df,
+        x="Année",
+        y="Asset Value",
+        title="Valeur de l'actif"
+    )
+
+    st.plotly_chart(
+        fig5,
+        use_container_width=True
+    )
