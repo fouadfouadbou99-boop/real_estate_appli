@@ -1,20 +1,28 @@
-def run_checks(df):
+class Checks:
 
-    warnings = []
+    @staticmethod
+    def run(df):
 
-    if min(df["DSCR"]) < 1.20:
-        warnings.append(
-            "DSCR inférieur à 1.20"
-        )
+        warnings = []
 
-    if max(df["LTV"]) > 0.80:
-        warnings.append(
-            "LTV supérieur à 80%"
-        )
+        if df["DSCR"].min() < 1.20:
 
-    if df["Solde Dette"].iloc[-1] > 1:
-        warnings.append(
-            "Dette non remboursée"
-        )
+            warnings.append(
+                "DSCR inférieur à 1.20"
+            )
 
-    return warnings
+        if df["LTV"].max() > 0.80:
+
+            warnings.append(
+                "LTV supérieur à 80%"
+            )
+
+        if abs(
+                df["Solde Dette"].iloc[-1]
+        ) > 1:
+
+            warnings.append(
+                "Dette non remboursée"
+            )
+
+        return warnings
