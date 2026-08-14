@@ -1,0 +1,15 @@
+from export_excel import export_full_report
+
+excel_data = export_full_report(
+    projection_df,
+    report_df,
+    sensitivity_df,
+    kpis
+)
+
+st.download_button(
+    label="📥 Télécharger le Rapport Complet",
+    data=excel_data,
+    file_name="Investment_Committee_Report.xlsx",
+    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+)
