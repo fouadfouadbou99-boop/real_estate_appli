@@ -1,71 +1,108 @@
-# =====================================================
-# MODULE METRICS
-# Calcul des KPI financiers
-# =====================================================
-
 import numpy as np
 import numpy_financial as npf
-import pandas as pd
 
 
-def calculate_irr(
-    equity_investment: float,
-    cashflows_df: pd.DataFrame
-) -> float:
+def compute_exit_value(
+    final_noi,
+    growth_rate,
+    exit_cap_rate,
+    selling_cost_pct
+):
     """
-    TRI (IRR) de l'investissement.
+    NOI N+1 / Exit Cap
     """
 
-    cashflows = [-equity_investment]
+    noi_n1 = final_noi * (1 + growth_rate)
 
-    cashflows.extend(
-        cashflows_df["CF Equity"].tolist()
+    gross_exit_value = (
+        noi_n1 /
+        exit_cap_rate
     )
 
-    try:
-        return float(
-            npf.irr(cashflows)
+    net_exit_value = (
+        gross_exit_value *
+        (1 - selling_cost_pct)
+    )
+
+    return gross_exit_value, net_exit_value
+
+
+def compute_net_sale_proceeds(
+    net_exit_value,
+    remaining_debt
+):
+
+    return (
+        net_exit_value
+        - remaining_debt
+    )
+
+
+def compute_equity_irr(
+    equity_initial,
+    cash_flows_equity,
+    net_sale_proceeds
+):
+
+    flows = [-equity_initial]
+
+    flows.extend(cash_flows_equity)
+
+    flows[-1] = (
+        flows[-1]
+        + net_sale_proceeds
+    )
+
+    return npf.irr(flows)
+
+
+def compute_project_irr(
+    project_cost,
+    noi_series,
+    net_exit_value
+):
+
+    flows = [-project_cost]
+
+    flows.extend(noi_series)
+
+    flows[-1] += net_exit_value
+
+    return npf.irr(flows)
+
+
+def compute_npv(
+    discount_rate,
+    equity_initial,
+    cash_flows_equity,
+    net_sale_proceeds
+):
+
+    flows = cash_flows_equity.copy()
+
+    flows[-1] += net_sale_proceeds
+
+    return (
+        npf.npv(
+            discount_rate,
+            flows
         )
-
-    except Exception:
-        return 0.0
-
-
-def calculate_npv(
-    equity_investment: float,
-    cashflows_df: pd.DataFrame,
-    discount_rate: float
-) -> float:
-    """
-    VAN (NPV)
-    """
-
-    cashflows = (
-        cashflows_df["CF Equity"]
-        .tolist()
+        - equity_initial
     )
 
-    npv = npf.npv(
-        discount_rate,
-        cashflows
+
+def compute_moic(
+    equity_initial,
+    cash_flows_equity,
+    net_sale_proceeds
+):
+
+    total_received = (
+        sum(cash_flows_equity)
+        + net_sale_proceeds
     )
 
-    npv = npv - equity_investment
-
-    return float(npv)
-
-
-def calculate_equity_multiple(
-    equity_investment: float,
-    cashflows_df: pd.DataFrame
-) -> float:
-    """
-    Equity Multiple
-    """
-
-    total_distributions = (
-        cashflows_df["CF Equity"]
-        .sum()
+    return (
+        total_received /
+        equity_initial
     )
-
-    if equity
