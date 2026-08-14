@@ -1,25 +1,25 @@
 import pandas as pd
 
 
-def build_sensitivity_table(
-    valuation_function
+def create_sensitivity(
+        valuation_callback
 ):
 
-    growth_rates = [
+    growths = [
         0.01,
         0.02,
         0.03,
         0.04
     ]
 
-    exit_caps = [
+    caps = [
         0.065,
-        0.070,
+        0.07,
         0.075,
-        0.080
+        0.08
     ]
 
-    sensitivity = pd.DataFrame(
+    matrix = pd.DataFrame(
         index=[
             "1%",
             "2%",
@@ -34,21 +34,21 @@ def build_sensitivity_table(
         ]
     )
 
-    for g in growth_rates:
+    for g in growths:
 
-        for cap in exit_caps:
+        for cap in caps:
 
-            irr = valuation_function(
+            irr = valuation_callback(
                 growth=g,
                 exit_cap=cap
             )
 
-            sensitivity.loc[
-                f"{int(g*100)}%",
+            matrix.loc[
+                f"{g*100:.0f}%",
                 f"{cap*100:.1f}%"
             ] = round(
-                irr * 100,
+                irr*100,
                 2
             )
 
-    return sensitivity
+    return matrix
