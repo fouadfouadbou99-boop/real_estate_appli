@@ -1,165 +1,104 @@
-# =====================================================
-# MODULE VALORISATION
-# Calcul de la valeur de sortie
-# =====================================================
-
-import pandas as pd
+import numpy_financial as npf
 
 
-def gross_exit_value(
-    terminal_noi: float,
-    exit_cap_rate: float
-) -> float:
-    """
-    Valeur brute à la sortie.
+class Valuation:
 
-    Valeur = NOI Terminal / Exit Cap Rate
-    """
+    @staticmethod
+    def exit_value(
+            final_noi,
+            growth,
+            exit_cap,
+            selling_cost_pct
+    ):
 
-    if exit_cap_rate <= 0:
-        return 0
+        noi_n1 = final_noi * (1 + growth)
 
-    return terminal_noi / exit_cap_rate
+        gross_exit_value = (
+            noi_n1 /
+            exit_cap
+        )
 
+        net_exit_value = (
+            gross_exit_value *
+            (1 - selling_cost_pct)
+        )
 
-def net_exit_value(
-    terminal_noi: float,
-    exit_cap_rate: float,
-    sale_cost_rate: float
-) -> float:
-    """
-    Valeur nette après frais de cession.
-    """
+        return (
+            gross_exit_value,
+            net_exit_value
+        )
 
-    gross_value = gross_exit_value(
-        terminal_noi,
-        exit_cap_rate
-    )
+    @staticmethod
+    def net_sale_proceeds(
+            net_exit_value,
+            remaining_debt
+    ):
 
-    return gross_value * (
-        1 - sale_cost_rate
-    )
+        return (
+            net_exit_value -
+            remaining_debt
+        )
 
+    @staticmethod
+    def equity_irr(
+            initial_equity,
+            cashflows,
+            sale_proceeds
+    ):
 
-def equity_proceeds(
-    terminal_noi: float,
-    exit_cap_rate: float,
-    sale_cost_rate: float,
-    remaining_debt: float
-) -> float:
-    """
-    Produit net revenant à l'actionnaire.
-    """
+        flows = [-initial_equity]
 
-    net_value = net_exit_value(
-        terminal_noi,
-        exit_cap_rate,
-        sale_cost_rate
-    )
+        flows.extend(cashflows)
 
-    proceeds = net_value - remaining_debt
+        flows[-1] += sale_proceeds
 
-    return proceeds
+        return npf.irr(flows)
 
+    @staticmethod
+    def project_irr(
+            project_cost,
+            noi_series,
+            net_exit_value
+    ):
 
-def add_exit_to_cashflows(
-    cashflows_df: pd.DataFrame,
-    debt_df: pd.DataFrame,
-    exit_cap_rate: float,
-    sale_cost_rate: float
-) -> pd.DataFrame:
-    """
-    Ajoute le produit de cession
-    au dernier cash-flow actionnaire.
-    """
+        flows = [-project_cost]
 
-    result_df = cashflows_df.copy()
+        flows.extend(noi_series)
 
-    terminal_noi = float(
-        result_df.iloc[-1]["NOI"]
-    )
+        flows[-1] += net_exit_value
 
-    remaining_debt = float(
-        debt_df.iloc[-1]["Closing Balance"]
-    )
+        return npf.irr(flows)
 
-    proceeds = equity_proceeds(
-        terminal_noi,
-        exit_cap_rate,
-        sale_cost_rate,
-        remaining_debt
-    )
+    @staticmethod
+    def npv(
+            discount_rate,
+            initial_equity,
+            cashflows,
+            sale_proceeds
+    ):
 
-    result_df.loc[
-        result_df.index[-1],
-        "CF Equity"
-    ] += proceeds
+        flows = cashflows.copy()
 
-    result_df["Exit Proceeds"] = 0.0
+        flows[-1] += sale_proceeds
 
-    result_df.loc[
-        result_df.index[-1],
-        "Exit Proceeds"
-    ] = round(proceeds, 2)
+        return (
+            npf.npv(
+                discount_rate,
+                flows
+            ) - initial_equity
+        )
 
-    return result_df
+    @staticmethod
+    def moic(
+            initial_equity,
+            cashflows,
+            sale_proceeds
+    ):
 
-
-def valuation_summary(
-    terminal_noi: float,
-    exit_cap_rate: float,
-    sale_cost_rate: float,
-    remaining_debt: float
-) -> dict:
-    """
-    Résumé de la valorisation.
-    """
-
-    gross_value = gross_exit_value(
-        terminal_noi,
-        exit_cap_rate
-    )
-
-    net_value = net_exit_value(
-        terminal_noi,
-        exit_cap_rate,
-        sale_cost_rate
-    )
-
-    proceeds = (
-        net_value -
-        remaining_debt
-    )
-
-    return {
-
-        "terminal_noi":
-            round(
-                terminal_noi,
-                2
-            ),
-
-        "gross_exit_value":
-            round(
-                gross_value,
-                2
-            ),
-
-        "net_exit_value":
-            round(
-                net_value,
-                2
-            ),
-
-        "remaining_debt":
-            round(
-                remaining_debt,
-                2
-            ),
-
-        "equity_proceeds":
-            round(
-                proceeds,
-                2
+        return (
+            (
+                sum(cashflows)
+                + sale_proceeds
             )
-    }
+            / initial_equity
+        )
