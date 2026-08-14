@@ -1,8 +1,6 @@
-streamlit
-pandas
-numpy
-numpy-financial
-plotly
-openpyxl
-xlsxwriter
-reportlab
+pandas>=2.2
+numpy>=1.26
+numpy-financial>=1.0
+openpyxl>=3.1
+matplotlib>=3.8
+xlsxwriter>=3.2
